@@ -1,0 +1,43 @@
+# .github/workflows/backend-destroy.yml
+
+name: Backend Destroy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  destroy:
+    permissions:
+      contents: read # for actions/checkout to fetch code
+      security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
+    runs-on: ubuntu-latest
+    env:
+      AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Destroy backend deployment in AWS EKS
+        run: |
+          aws eks --region ${{ secrets.AWS_REGION }} update-kubeconfig --name ${{ secrets.CLUSTER_NAME }}
+          if kubectl get deployment backend-deployment -n default &> /dev/null; then
+            echo "Deployment exists, deleting..."
+            wget https://raw.githubusercontent.com/fredritchie/3-tier-eks-manifests/main/backend.yaml
+            kubectl delete -f backend.yaml
+          else
+            echo "Deployment doesn't exist, nothing to delete."
+          fi
+
+      - name: Remove Docker image from AWS ECR
+        run: |
+          aws ecr batch-delete-image --repository-name backend --image-ids imageTag=latest
